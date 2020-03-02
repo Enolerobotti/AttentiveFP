@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import numpy
 
 class Fingerprint(nn.Module):
 
@@ -45,13 +46,12 @@ class Fingerprint(nn.Module):
 
         # generate mask to eliminate the influence of blank atoms
         attend_mask = atom_degree_list.clone()
-        attend_mask[attend_mask != mol_length-1] = 1
-        attend_mask[attend_mask == mol_length-1] = 0
+        attend_mask = attend_mask - mol_length + 1
+        attend_mask = numpy.heaviside(attend_mask.abs(), 0).long()
+        softmax_mask = attend_mask.clone()
         attend_mask = self._cast_float(attend_mask).unsqueeze(-1)
 
-        softmax_mask = atom_degree_list.clone()
-        softmax_mask[softmax_mask != mol_length-1] = 0
-        softmax_mask[softmax_mask == mol_length-1] = -9e8 # make the softmax value extremly small
+        softmax_mask = ((softmax_mask-1)*9e8).long() # make the softmax value extremly small
         softmax_mask = self._cast_float(softmax_mask).unsqueeze(-1)
 
         batch_size, mol_length, max_neighbor_num, fingerprint_dim = neighbor_feature.shape
@@ -104,8 +104,7 @@ class Fingerprint(nn.Module):
         activated_features_mol = F.relu(mol_feature)           
         
         mol_softmax_mask = atom_mask.clone()
-        mol_softmax_mask[mol_softmax_mask == 0] = -9e8
-        mol_softmax_mask[mol_softmax_mask == 1] = 0
+        mol_softmax_mask = (mol_softmax_mask - 1)*9e8
         mol_softmax_mask = self._cast_float(mol_softmax_mask)
         
         for t in range(self.T):
